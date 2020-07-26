@@ -22,8 +22,10 @@
 
 #include <cstdint>
 #include <map>
+#include <vector>
 #include <boost/property_tree/ptree.hpp>
 #include "log.h"
+#include "ipRange.h"
 
 class Config {
 public:
@@ -83,6 +85,15 @@ public:
         std::string cert;
         std::string ca;
     } mysql;
+    class OutAreaFilter {
+    public:
+        bool enabled;
+        bool blockMode;
+        bool blockDomain;
+        bool blockUnspecific;
+        std::vector<boost::asio::ip::address_v4_range> range4;
+        std::vector<boost::asio::ip::address_v6_range> range6;
+    } outAreaFilter;
     void load(const std::string &filename);
     void populate(const std::string &JSON);
     bool sip003();

@@ -23,6 +23,7 @@
 #include <stdexcept>
 #include <boost/property_tree/json_parser.hpp>
 #include <openssl/evp.h>
+
 using namespace std;
 using namespace boost::property_tree;
 
@@ -60,7 +61,7 @@ void Config::populate(const ptree &tree) {
     target_port = tree.get("target_port", uint16_t());
     map<string, string>().swap(password);
     if (tree.get_child_optional("password")) {
-        for (auto& item: tree.get_child("password")) {
+        for (auto &item: tree.get_child("password")) {
             string p = item.second.get_value<string>();
             password[SHA224(p)] = p;
         }
@@ -78,15 +79,15 @@ void Config::populate(const ptree &tree) {
     ssl.sni = tree.get("ssl.sni", string());
     ssl.alpn = "";
     if (tree.get_child_optional("ssl.alpn")) {
-        for (auto& item: tree.get_child("ssl.alpn")) {
+        for (auto &item: tree.get_child("ssl.alpn")) {
             string proto = item.second.get_value<string>();
-            ssl.alpn += (char)((unsigned char)(proto.length()));
+            ssl.alpn += (char) ((unsigned char) (proto.length()));
             ssl.alpn += proto;
         }
     }
     map<string, uint16_t>().swap(ssl.alpn_port_override);
     if (tree.get_child_optional("ssl.alpn_port_override")) {
-        for (auto& item: tree.get_child("ssl.alpn_port_override")) {
+        for (auto &item: tree.get_child("ssl.alpn_port_override")) {
             ssl.alpn_port_override[item.first] = item.second.get_value<uint16_t>();
         }
     }
@@ -111,6 +112,34 @@ void Config::populate(const ptree &tree) {
     mysql.key = tree.get("mysql.key", string());
     mysql.cert = tree.get("mysql.cert", string());
     mysql.ca = tree.get("mysql.ca", string());
+    outAreaFilter.enabled = tree.get("outAreaFilter.enabled", false);
+    outAreaFilter.blockMode = tree.get("outAreaFilter.blockMode", false);
+    outAreaFilter.blockDomain = tree.get("outAreaFilter.blockDomain", false);
+    outAreaFilter.blockUnspecific = tree.get("outAreaFilter.blockUnspecific", false);
+    std::vector<boost::asio::ip::address_v4_range>().swap(outAreaFilter.range4);
+    if (tree.get_child_optional("outAreaFilter.range4")) {
+        for (auto &item: tree.get_child("outAreaFilter.range4")) {
+            auto a = item.second.get_value<std::string>();
+            boost::asio::ip::address_v4_range r;
+            if (parseRangeV4(a, r)) {
+                outAreaFilter.range4.push_back(r);
+            } else {
+                Log::log("ignore invalid outAreaFilter.range4: " + a, Log::WARN);
+            }
+        }
+    }
+    std::vector<boost::asio::ip::address_v6_range>().swap(outAreaFilter.range6);
+    if (tree.get_child_optional("outAreaFilter.range6")) {
+        for (auto &item: tree.get_child("outAreaFilter.range6")) {
+            auto a = item.second.get_value<std::string>();
+            boost::asio::ip::address_v6_range r;
+            if (parseRangeV6(a, r)) {
+                outAreaFilter.range6.push_back(r);
+            } else {
+                Log::log("ignore invalid outAreaFilter.range6: " + a, Log::WARN);
+            }
+        }
+    }
 }
 
 bool Config::sip003() {
@@ -159,7 +188,7 @@ string Config::SHA224(const string &message) {
     }
 
     for (unsigned int i = 0; i < digest_len; ++i) {
-        sprintf(mdString + (i << 1), "%02x", (unsigned int)digest[i]);
+        sprintf(mdString + (i << 1), "%02x", (unsigned int) digest[i]);
     }
     mdString[digest_len << 1] = '\0';
     EVP_MD_CTX_free(ctx);

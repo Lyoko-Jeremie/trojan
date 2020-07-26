@@ -20,6 +20,7 @@
 #include "serversession.h"
 #include "proto/trojanrequest.h"
 #include "proto/udppacket.h"
+#include <algorithm>
 using namespace std;
 using namespace boost::asio::ip;
 using namespace boost::asio::ssl;
@@ -132,6 +133,76 @@ void ServerSession::udp_async_write(const string &data, const udp::endpoint &end
     });
 }
 
+void outAreaFilterChecker(bool &valid, const string &query_addr, const Config &config,
+                          const boost::asio::ip::tcp::endpoint &in_endpoint) {
+    if (valid) {
+        // string query_addr = req.address.address;
+        if (config.outAreaFilter.enabled) {
+            // if query_addr&query_port not in filter limit area, set valid=false
+            boost::system::error_code ec;
+            auto addr = boost::asio::ip::make_address(query_addr, ec);
+            if (ec) {
+                // it's a domain
+                if (config.outAreaFilter.blockDomain) {
+                    Log::log_with_endpoint(in_endpoint, "AreaFilter hit a domain : " + query_addr, Log::INFO);
+                    valid = false;
+                }
+            } else if (addr.is_v4()) {
+                auto addV4 = addr.to_v4();
+                auto n = std::find_if(
+                        config.outAreaFilter.range4.begin(),
+                        config.outAreaFilter.range4.end(),
+                        [&addV4](const decltype(config.outAreaFilter.range4)::value_type &r) {
+                            bool inRange = r.find(addV4) != r.end();
+                            return inRange;
+                        }
+                );
+                if (n != config.outAreaFilter.range4.end()) {
+                    // find it in block list
+                    if (config.outAreaFilter.blockMode) {
+                        valid = false;
+                    }
+                } else {
+                    // dont find it in allow list
+                    if (!config.outAreaFilter.blockMode) {
+                        valid = false;
+                    }
+                }
+            } else if (addr.is_v6()) {
+                auto addV6 = addr.to_v6();
+                auto n = std::find_if(
+                        config.outAreaFilter.range6.begin(),
+                        config.outAreaFilter.range6.end(),
+                        [&addV6](const decltype(config.outAreaFilter.range6)::value_type &r) {
+                            bool inRange = r.find(addV6) != r.end();
+                            return inRange;
+                        }
+                );
+                if (n != config.outAreaFilter.range6.end()) {
+                    // find it in block list
+                    if (config.outAreaFilter.blockMode) {
+                        valid = false;
+                    }
+                } else {
+                    // dont find it in allow list
+                    if (!config.outAreaFilter.blockMode) {
+                        valid = false;
+                    }
+                }
+            } else {
+                // it's a unspecific addr
+                if (config.outAreaFilter.blockUnspecific) {
+                    Log::log_with_endpoint(in_endpoint, "AreaFilter hit a unspecific addr : " + query_addr, Log::INFO);
+                    valid = false;
+                }
+            }
+        }
+        if (!valid) {
+            Log::log_with_endpoint(in_endpoint, "AreaFilter banned a query : " + query_addr, Log::INFO);
+        }
+    }
+}
+
 void ServerSession::in_recv(const string &data) {
     if (status == HANDSHAKE) {
         TrojanRequest req;
@@ -151,6 +222,11 @@ void ServerSession::in_recv(const string &data) {
             if (!valid) {
                 Log::log_with_endpoint(in_endpoint, "valid trojan request structure but possibly incorrect password (" + req.password + ')', Log::WARN);
             }
+        }
+        if (valid) {
+            string query_addr = req.address.address;
+            // insert outAreaFilter validator on there
+            outAreaFilterChecker(valid, query_addr, config, in_endpoint);
         }
         string query_addr = valid ? req.address.address : config.remote_addr;
         string query_port = to_string([&]() {
@@ -183,7 +259,7 @@ void ServerSession::in_recv(const string &data) {
         }
         sent_len += out_write_buf.length();
         auto self = shared_from_this();
-        resolver.async_resolve(query_addr, query_port, [this, self, query_addr, query_port](const boost::system::error_code error, const tcp::resolver::results_type& results) {
+        resolver.async_resolve(query_addr, query_port, [this, self, query_addr, query_port, valid](const boost::system::error_code error, const tcp::resolver::results_type& results) {
             if (error || results.empty()) {
                 Log::log_with_endpoint(in_endpoint, "cannot resolve remote server hostname " + query_addr + ": " + error.message(), Log::ERROR);
                 destroy();
@@ -200,6 +276,15 @@ void ServerSession::in_recv(const string &data) {
                 }
             }
             Log::log_with_endpoint(in_endpoint, query_addr + " is resolved to " + iterator->endpoint().address().to_string(), Log::ALL);
+            if (valid) {
+                bool validChecker = valid;
+                // insert outAreaFilter validator on there
+                outAreaFilterChecker(validChecker, query_addr, config, in_endpoint);
+                if (!validChecker) {
+                    destroy();
+                    return;
+                }
+            }
             boost::system::error_code ec;
             out_socket.open(iterator->endpoint().protocol(), ec);
             if (ec) {

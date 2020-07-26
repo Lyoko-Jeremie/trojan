@@ -29,7 +29,9 @@ add_executable(trojan
     src/session/session.cpp
     src/session/udpforwardsession.cpp
     src/ssl/ssldefaults.cpp
-    src/ssl/sslsession.cpp)
+    src/ssl/sslsession.cpp
+    src/core/ipRange.cpp
+    src/core/ipRange.h)
 include_directories(src)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
