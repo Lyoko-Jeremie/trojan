@@ -41,6 +41,7 @@ include_directories(${Boost_INCLUDE_DIR})
 target_link_libraries(trojan ${Boost_LIBRARIES})
 if(MSVC)
     add_definitions(-DBOOST_DATE_TIME_NO_LIB)
+    add_definitions(-DBOOST_ALL_NO_LIB)
 endif()
 
 find_package(OpenSSL 1.1.0 REQUIRED)
