@@ -47,5 +47,17 @@
         "key": "",
         "cert": "",
         "ca": ""
+    },
+    "outAreaFilter": {
+        "enabled": false,
+        "blockMode": true,
+        "blockDomain": false,
+        "blockUnspecific": true,
+        "range4": [
+            "127.0.0.1/32"
+        ],
+        "range6": [
+            "::1/127"
+        ]
     }
 }
