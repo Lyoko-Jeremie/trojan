@@ -63,7 +63,6 @@ bool parseRange(const std::string &str, boost::asio::ip::basic_address_range<Add
     if (str.find('/', pos + 1) != std::string::npos) {
         return false;
     }
-    boost::system::error_code ec;
     Addr address;
     if (!parseAddress(str.substr(0, pos), address)) {
         return false;
@@ -78,7 +77,7 @@ bool parseRange(const std::string &str, boost::asio::ip::basic_address_range<Add
         return false;
     }
     range = getRange(address, size);
-    return !ec;
+    return true;
 }
 
 //template<>
